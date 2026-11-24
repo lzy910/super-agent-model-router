@@ -292,6 +292,7 @@ function reviewScore(answer) {
  * routes. `sample` reviews a random share; `always` reviews every cheaper answer.
  */
 export async function reviewRunPackages(ctx, run, routes, config, { signal, random = Math.random, lifecycle } = {}) {
+  if (run.fixedRolePolicy) return []
   const mode = valueOf(config, 'reviewMode', 'off')
   if (mode !== 'sample' && mode !== 'always') return []
   const rate = Math.min(1, Math.max(0, finiteNumber(valueOf(config, 'reviewSampleRate', 0.2), 0.2)))
@@ -568,7 +569,7 @@ export async function executeConfiguredAssignment(ctx, task, config = {}, option
       model: plannedPackage?.recommendedModel }, route, packageTask, config, options.confirmOverBudget)
     if (denied) return denied
     const quality = routeQuality(route)
-    const alternatives = gate && !direct && route.manualPinned !== true && apiUpgradeEligible(route, routes)
+    const alternatives = gate && !plan.fixedRolePolicy && !direct && route.manualPinned !== true && apiUpgradeEligible(route, routes)
       && valueOf(config, 'qualityEscalationEnabled', false) === true && quality !== null
       ? routes.filter(candidate => apiUpgradeEligible(candidate, routes) && routeQuality(candidate) !== null
         && routeQuality(candidate) > quality && (candidate.provider !== route.provider || candidate.model !== route.model))

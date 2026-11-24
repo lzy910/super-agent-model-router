@@ -118,7 +118,7 @@ export function createPlanFromRoutes(task, availableRoutes, {
       return { ...route, executionChannel: channel.kind,
         reasoningExecution: directRoute ? 'default' : channel.kind === 'harness-llm' ? 'api' : 'unsupported-cli' }
     }),
-    mode: directRoute ? 'single' : selectedMode,
+    mode: directRoute ? 'direct' : selectedMode,
     budgetUsd: Math.max(0, Number.isFinite(budgetUsd) ? budgetUsd : 0),
     pricing,
     liveBench,
@@ -157,11 +157,12 @@ export function createPlanFromRoutes(task, availableRoutes, {
     toolNotice: '执行渠道按官方工具注册表和已核验适配器标注：official-cli 表示该厂商官方 CLI 已安装且可托管执行；harness-llm 表示通过官方模型目录调用。可在工作台查看安装与执行支持状态。',
     team: {
       requested: selectedMode === 'team',
-      recommended: selectedMode === 'team' && plan.complexity.band === 'complex' && plan.subtasks.length > 1,
+      recommended: selectedMode === 'team' && plan.subtasks.length > 1,
       handoff: '可在官方会话调用 model_router_team_execute 托管执行当前平台支持的官方 CLI 工作包；官方 Agent Teams 可协作管理任务，但成员模型由宿主配置，不能直接按本计划逐个切换。',
       workPackages: plan.subtasks.map((item, index) => ({
         id: item.id,
         name: item.name,
+        ...(item.fixedRoute ? { fixedRoute: item.fixedRoute, modelFamily: item.modelFamily } : {}),
         ...(item.objective ? { objective: item.objective } : {}),
         type: item.type,
         purpose: item.purpose,

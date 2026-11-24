@@ -1,5 +1,8 @@
 # DSH Bot · Model Router
 
+Task decomposition always follows four roles: **Architecture → Development → Testing → Delivery**. Architecture and Development share one configured DeepSeek model; Testing and Delivery share one configured Qwen model. When a family has multiple routes, provider/model identifiers determine a stable selection. Complexity, pricing presets, and quality scores cannot change these bindings. Planning reports a configuration error if either family is missing. Fixed role packages cannot be manually reassigned or automatically upgraded to other models; retries retain their original models. Explicit direct calls continue to use the specified model.
+
+
 [English](README.md) · [简体中文](README.zh.md)
 
 [![Bot npm](https://flat.badgen.net/npm/v/@ljwei-stak/dsh-model-route-bot)](https://www.npmjs.com/package/@ljwei-stak/dsh-model-route-bot) [![npm version](https://flat.badgen.net/npm/v/@ljwei-stak/dsh-model-router)](https://www.npmjs.com/package/@ljwei-stak/dsh-model-router) [![dshfind](https://dshfind.com/api/badge/Alice-Marx/dsh-model-router?lang=en)](https://dshfind.com/en/plugins/Alice-Marx/dsh-model-router?ref=badge) [![dshfind](https://dshfind.com/api/badge/Alice-Marx/dsh-model-router?metric=downloads&lang=en)](https://dshfind.com/en/plugins/Alice-Marx/dsh-model-router?ref=badge) [![Listed in the DSH plugin directory](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/alice-marx/dsh-model-router) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)

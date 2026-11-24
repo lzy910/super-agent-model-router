@@ -67,13 +67,13 @@ function ChannelBadge({ item }) {
   )
 }
 
-export function PlanResults({ plan, ledger, headingRef, assignmentMode = 'algorithm', packageAssignments = {}, assignmentOptions = [], manualAllowed = true, onAssignmentModeChange, onPackageAssignmentChange, onRestoreAssignments }) {
+export function PlanResults({ plan, ledger, headingRef, assignmentMode = 'algorithm', packageAssignments = {}, assignmentOptions = [], manualAllowed = !plan?.fixedRolePolicy, onAssignmentModeChange, onPackageAssignmentChange, onRestoreAssignments }) {
   const selected = plan.selected
   const estimate = apiPlanEstimate(plan)
   const budget = plan.accounting ? planBudget(ledger, estimate) : null
   const subscriptionEstimate = subscriptionEstimateText(plan)
   const packageNames = new Map((plan.team?.workPackages ?? []).map(item => [item.id, item.name]))
-  const purposeLabel = { analysis: '任务分析', execution: '任务实施', verification: '独立验证', synthesis: '结果整合' }
+  const purposeLabel = { analysis: '架构', execution: '开发', verification: '测试', synthesis: '交付' }
   return (
     <section className="mr-card mr-results" aria-label="路由建议">
       <div className="mr-card-head">
@@ -105,12 +105,12 @@ export function PlanResults({ plan, ledger, headingRef, assignmentMode = 'algori
             <h3 className="mr-section-title">{plan.mode === 'team' ? '团队工作包' : '任务工作包'}</h3>
             <div className="mr-assignment-controls">
               <div className="mr-segment" role="group" aria-label="工作包分配方式">
-                <button type="button" aria-pressed={assignmentMode === 'algorithm'} onClick={() => onAssignmentModeChange?.('algorithm')}>按算法推荐分配</button>
-                <button type="button" aria-pressed={assignmentMode === 'manual'} disabled={!manualAllowed || !plan.team.workPackages.length} title={!manualAllowed ? '设置中已关闭手动改派' : '为每个工作包选择模型 API 或官方工具'} onClick={() => onAssignmentModeChange?.('manual')}>手动调整分配</button>
+                <button type="button" aria-pressed={assignmentMode === 'algorithm'} onClick={() => onAssignmentModeChange?.('algorithm')}>{plan.fixedRolePolicy ? '固定四角色分配' : '按算法推荐分配'}</button>
+                <button type="button" aria-pressed={assignmentMode === 'manual'} disabled={!manualAllowed || !plan.team.workPackages.length} title={plan.fixedRolePolicy ? '四角色使用固定模型' : !manualAllowed ? '设置中已关闭手动改派' : '为每个工作包选择模型 API 或官方工具'} onClick={() => onAssignmentModeChange?.('manual')}>手动调整分配</button>
               </div>
               {assignmentMode === 'manual' && <button className="mr-button mr-button-secondary" type="button" onClick={onRestoreAssignments}>恢复推荐分配</button>}
             </div>
-            {!manualAllowed && <p className="mr-caption">设置中已关闭手动改派。</p>}
+            {!manualAllowed && <p className="mr-caption">{plan.fixedRolePolicy ? '固定流程：架构 → 开发 → 测试 → 交付。架构和开发共用 DeepSeek，测试和交付共用 Qwen。' : '设置中已关闭手动改派。'}</p>}
             <p className="mr-caption">{assignmentMode === 'manual'
               ? '手动分配可混合模型 API 与官方工具，按依赖执行只读任务；工具使用默认模型。上方费用仍是算法建议估算，手动目标与费用以执行预览为准，预览会核验套餐计费与工具就绪状态。'
               : '下方模型是工作包的规划建议。模型路由按只读方式执行，每步可使用官方 CLI 或模型目录 API；如需编辑文件，可在下方执行区选择“官方工具协作”和“编辑文件”权限。CLI 请求模型名需符合厂商规则，实际模型以运行记录为准。'}</p>
@@ -1020,7 +1020,7 @@ export function RouterMainPage({ loadCatalog, settingsScope, listOfficialTools, 
   const dataRevision = workbench.ledger.value?.dynamicData?.revision ?? ''
   const feedbackRevision = workbench.ledger.value?.learning?.revision ?? ''
   const evidenceRevision = workbench.ledger.value?.routingEvidence?.revision ?? ''
-  const manualAllowed = workbench.ledger.value?.settings?.allowManualReassign !== false
+  const manualAllowed = !plan?.fixedRolePolicy && workbench.ledger.value?.settings?.allowManualReassign !== false
     && settingsScope.getSnapshot().value?.allowManualReassign !== false
   React.useEffect(() => {
     setAssignmentMode('algorithm')

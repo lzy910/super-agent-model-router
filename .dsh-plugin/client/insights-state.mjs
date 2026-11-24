@@ -282,10 +282,10 @@ export function rerunSupport(run, ledger = null) {
     if (!run.isolatedWorkspace || !run.baseCommit) {
       return { supported: false, writes: true, reassign: false, reason: '旧版本记录缺少独立工作区或 Git 基线，无法安全续跑；请在会话中重新调用 model_router_team_execute。' }
     }
-    return { supported: true, writes: true, reassign: true, reason: '',
+    return { supported: true, writes: true, reassign: !run?.fixedRolePolicy, reason: '',
       confirm: '续跑会在新的独立 Git 工作树中先套用之前的改动，再重跑该步骤及其下游；成功后把合并补丁整合回工作区（工作区须干净且仍在原基线提交）。' }
   }
-  return { supported: true, writes: false, reassign: true, reason: '', confirm: '' }
+  return { supported: true, writes: false, reassign: !run?.fixedRolePolicy, reason: '', confirm: '' }
 }
 
 const pad2 = value => String(value).padStart(2, '0')

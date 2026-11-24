@@ -104,6 +104,9 @@ export async function rerunRecordedStep(ctx, config = {}, { runId, packageId, pr
     if (!routes.some(route => route.provider === text(provider) && route.model === text(model))) {
       throw new Error(`路线 ${text(provider)}/${text(model)} 不在 Harness 模型目录中；请在官方“模型”页添加后重试，或选择列表中的其他路线。`)
     }
+    if (target.fixedRoute && (text(provider) !== target.fixedRoute.provider || text(model) !== target.fixedRoute.model)) {
+      throw new Error('固定四角色工作包必须沿用原定模型，不能改派。')
+    }
     override = { provider: text(provider), model: text(model) }
   } else if (target.ok) {
     throw new Error('该步骤已成功；如需换模型重做，请指定改派的 provider/model。')
@@ -241,6 +244,7 @@ function teamPlanFromRun(run, ids, override, targetId, estimates) {
   const workPackages = run.packages.filter(item => ids.includes(item.id)).map(item => ({
     id: item.id, name: item.name, objective: item.objective, dependsOn: item.dependsOn ?? [],
     type: item.type ?? 'general', purpose: item.purpose ?? 'execution',
+    ...(item.fixedRoute ? { fixedRoute: { ...item.fixedRoute }, modelFamily: item.modelFamily } : {}),
     verificationChecklist: item.verificationChecklist ?? [],
     recommendedProvider: item.id === targetId && override ? override.provider : item.recommendedProvider,
     recommendedModel: item.id === targetId && override ? override.model : item.recommendedModel,

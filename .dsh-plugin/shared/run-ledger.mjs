@@ -318,6 +318,7 @@ function storedPackage(planned, result, pricing, finishedAt, billingFor = billin
     id: planned.id,
     ...packageSelectionFields(result?.manualAssignment !== undefined ? { ...planned, ...result } : planned),
     name: planned.name,
+    ...(planned.fixedRoute ? { fixedRoute: { ...planned.fixedRoute }, modelFamily: planned.modelFamily } : {}),
     objective: String(planned.objective ?? '').slice(0, 2_000),
     ...(planned.type ? { type: String(planned.type) } : {}),
     ...(planned.purpose ? { purpose: String(planned.purpose) } : {}),
@@ -418,6 +419,7 @@ export function buildRunRecord({ id, createdAt, task, plan, execution, preset = 
     kind,
     executionMode,
     routingBypassed: plan?.routingBypassed === true,
+    ...(plan?.fixedRolePolicy ? { fixedRolePolicy: plan.fixedRolePolicy } : {}),
     mode: plan?.mode ?? 'single',
     ...(typeof plan?.assignmentMode === 'string' && plan.assignmentMode.trim().length > 0
       && plan.assignmentMode.length <= 40 && !/[\u0000-\u001f\u007f]/u.test(plan.assignmentMode)

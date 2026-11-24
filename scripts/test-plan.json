@@ -19,6 +19,7 @@
       "tests/adaptive-*.test.mjs",
       "tests/attribution-chain.test.mjs",
       "tests/harness-*.test.mjs",
+      "tests/fixed-role-routing.test.mjs",
       "tests/desktop-compat.test.mjs",
       "tests/bot-attention.test.mjs",
       "tests/readme-math.test.mjs",

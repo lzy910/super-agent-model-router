@@ -150,15 +150,6 @@ const TASK_TYPE_RULES = Object.freeze([
   ['writing', /写作|润色|小说|文案|报告|writing|draft/i],
 ])
 
-const TASK_TYPE_LABELS = Object.freeze({
-  vision: '视觉处理',
-  math: '数学推导',
-  code: '工程与代码',
-  research: '研究与检索',
-  summarization: '摘要与整理',
-  writing: '写作与表达',
-})
-
 /** Return all explicit business directions, ranked by signal count. */
 export function detectTaskTypes(text) {
   const value = String(text ?? '')
@@ -301,7 +292,7 @@ export function modelMetadata(name) {
  * chain-of-thought.
  */
 export function collaborationStage(plan, step) {
-  if (plan?.complexity?.band !== 'complex' || !Array.isArray(plan.subtasks)) return null
+  if ((!plan?.fixedRolePolicy && plan?.complexity?.band !== 'complex') || !Array.isArray(plan.subtasks)) return null
   const index = Math.max(1, Number(step) || 1) - 1
   const task = plan.subtasks[index]
   return task === undefined ? null : { ...task, index: index + 1, total: plan.subtasks.length }
@@ -323,7 +314,7 @@ export function collaborationInstruction(plan, step) {
   const taskType = String(plan.taskType ?? 'general')
   if (stage.purpose === 'synthesis') {
     return [
-      `[Model Router 协作阶段 ${stage.index}/${stage.total}：结果校验与整合]`,
+      `[Model Router 协作阶段 ${stage.index}/${stage.total}：${stage.name}]`,
       `你是最终汇总模型。请阅读主人原问题以及前序协作阶段的工作报告，完成${taskType}任务的交叉校验、冲突处理和最终回答。`,
       '只输出面向主人的最终答案，不要复述内部调度指令，不要编造不存在的证据。',
       '回答必须使用 Markdown；数学公式使用 KaTeX 兼容的 $...$ 或 $$...$$。',
@@ -331,7 +322,7 @@ export function collaborationInstruction(plan, step) {
   }
   if (stage.purpose === 'analysis') {
     return [
-      `[Model Router 协作阶段 ${stage.index}/${stage.total}：问题建模与约束提取]`,
+      `[Model Router 协作阶段 ${stage.index}/${stage.total}：${stage.name}]`,
       `请针对主人的 ${taskType} 问题完成问题建模：提取目标、约束、输入输出、验收标准和关键风险。`,
       '只提交结构化工作报告，供后续模型使用；不要直接替主人给最终答案，也不要输出隐私化的逐步思维链。',
     ].join('\n')
@@ -374,10 +365,8 @@ function taskQualityFloor(band, task) {
   return clamp(base + Math.max(0, Number(task.criticality ?? 0.75) - 0.65) * 0.12)
 }
 
-const MAX_EXPLICIT_EXECUTION_PACKAGES = 6
 const REQUIREMENT_ACTION = /(?:实现|新增|添加|修复|更新|构建|设计|完成|编写|优化|接入|支持|配置|部署|测试|验证|检查|整理|创建|移除|替换|迁移|适配|开发|调研|安装|下载|上传|发布|生成|集成|改造|封装|显示|提供|允许|确保|处理|解决|分析|探测|检测|选择|分配|拆分|对接|加入|保留|记录|输出|审查|核对|对比|提取|摘要|总结|分类|翻译|格式化|润色|可以|能够|需要|进行|implement|add|fix|update|build|design|write|improve|support|configure|deploy|test|verify|check|create|remove|replace|migrate|install|publish|generate|integrate|review|extract|summarize|classify|translate|format|should|must|need)/i
 const HIGH_STAKES_WORK = /架构|安全|隐私|权限|并发|事务|迁移|生产|部署|发布|证明|定理|科研|论文|复杂|多步骤|跨系统|系统设计|architecture|security|migration|production|proof|theorem|research/i
-const SIMPLE_WORK = /翻译|摘要|总结|提取|分类|格式化|列出|改写|润色|拼写|校对|translate|summarize|extract|classify|format|proofread/i
 const HIGH_STAKES_ACTION = /设计|实现|修复|审计|测试|验证|证明|推导|部署|迁移|规划|研究|解决|推理|design|implement|fix|audit|verify|prove|derive|deploy|migrate|research|solve/i
 const SIMPLE_REQUEST_START = /^(?:请|帮我)?(?:翻译|摘要|总结|提取|分类|格式化|列出|改写|润色|拼写|校对|translate|summarize|extract|classify|format|proofread)/i
 
@@ -391,16 +380,6 @@ function isHardRequirement(value) {
   const item = String(value ?? '').trim()
   if (isSimpleRequirement(item)) return false
   return HIGH_STAKES_WORK.test(item) && HIGH_STAKES_ACTION.test(item)
-}
-
-function requirementDifficulty(objective, type, fallback = 'balanced') {
-  const value = String(objective ?? '').trim()
-  if (isHardRequirement(value)) return 'complex'
-  if (value.length <= 180 && SIMPLE_WORK.test(value)) return 'simple'
-  const assessed = assessComplexity(value)
-  if (type === 'math' && /证明|推导|proof|derive/i.test(value)) return 'complex'
-  if (assessed.band === 'simple' && (type === 'code' || type === 'research')) return 'balanced'
-  return assessed.band === 'simple' ? 'simple' : assessed.band === 'complex' ? 'complex' : fallback
 }
 
 function shouldSplitRequirements(requirements) {
@@ -516,91 +495,35 @@ export function explicitStepReferences(objective) {
   return [...found].sort((a, b) => a - b)
 }
 
-function taskPackages(taskType, text, band) {
-  if (band !== 'complex') {
-    const task = { id: 'execution', name: '直接回答与必要校验', type: taskType, purpose: 'execution', difficulty: band, criticality: 0.65, dependsOn: [], preferredReasoningEffort: band === 'simple' ? 'low' : 'medium' }
+function taskPackages(taskType, text, band, direct = false) {
+  if (direct) {
+    const task = { id: 'execution', name: '直接回答与必要校验', objective: String(text), type: taskType, purpose: 'execution', difficulty: band, criticality: 0.65, dependsOn: [], preferredReasoningEffort: band === 'simple' ? 'low' : 'medium' }
     return [{ ...task, qualityFloor: taskQualityFloor(band, task) }]
   }
-  const value = String(text ?? '')
-  const packages = [
-    { id: 'analysis', name: '问题建模与约束提取', type: 'reasoning', purpose: 'analysis', difficulty: 'balanced', criticality: 0.80, dependsOn: [], preferredReasoningEffort: 'medium' },
+  const roles = [
+    { id: 'analysis', name: '架构', type: 'reasoning', purpose: 'analysis', modelFamily: 'deepseek', dependsOn: [], instruction: '分析完整需求，明确约束、架构、接口与验收标准，给出开发方案。' },
+    { id: 'execution', name: '开发', type: taskType, purpose: 'execution', modelFamily: 'deepseek', dependsOn: ['analysis'], instruction: '依据架构方案完成全部需求，说明实现与改动，提供可验证的交付物。' },
+    { id: 'verification', name: '测试', type: 'reasoning', purpose: 'verification', modelFamily: 'qwen', dependsOn: ['analysis', 'execution'], instruction: '依据需求和验收标准验证开发结果，检查正常流程、边界与回归风险，记录测试结果和未解决问题。' },
+    { id: 'synthesis', name: '交付', type: 'reasoning', purpose: 'synthesis', modelFamily: 'qwen', dependsOn: ['analysis', 'execution', 'verification'], instruction: '汇总架构、开发和测试结果，核对验收标准，给出最终交付内容、使用说明与已知问题。' },
   ]
-  const requirements = explicitRequirements(text)
-  if (requirements.length >= 2) {
-    // Preserve every stated requirement when the list exceeds the package cap.
-    const groups = requirements.length > MAX_EXPLICIT_EXECUTION_PACKAGES
-      ? [...requirements.slice(0, MAX_EXPLICIT_EXECUTION_PACKAGES - 1).map(item => [item]),
-        requirements.slice(MAX_EXPLICIT_EXECUTION_PACKAGES - 1)]
-      : requirements.map(item => [item])
-    groups.forEach((group, index) => {
-      const objective = group.length === 1 ? group[0]
-        : group.map((item, offset) => `${MAX_EXPLICIT_EXECUTION_PACKAGES + offset}. ${item}`).join('\n')
-      const type = detectTaskTypes(objective)[0] ?? 'general'
-      const difficulty = group.length > 1 ? 'complex' : requirementDifficulty(objective, type)
-      const previous = packages.at(-1)
-      // Explicit references (“依赖第 1 步”) become DAG edges; only earlier steps count, so the plan stays acyclic.
-      const groupOf = step => requirements.length > MAX_EXPLICIT_EXECUTION_PACKAGES && step >= MAX_EXPLICIT_EXECUTION_PACKAGES
-        ? MAX_EXPLICIT_EXECUTION_PACKAGES - 1 : step - 1
-      const explicit = [...new Set(group.flatMap(item => explicitStepReferences(item)).map(groupOf))]
-        .filter(target => target >= 0 && target < index).map(target => `execution-${target + 1}`)
-      const sequential = explicit.length === 0 && /^(?:最后|然后|接着|随后|再|基于|根据|测试|验证|部署|发布)|(?:完成|结束|实现)后/u.test(objective)
-      packages.push({
-        id: `execution-${index + 1}`,
-        name: group.length === 1
-          ? `需求 ${index + 1}：${group[0].slice(0, 28)}`
-          : `需求 ${index + 1}：其余 ${group.length} 项`,
-        objective,
-        type,
-        purpose: 'execution',
-        difficulty,
-        criticality: difficulty === 'simple' ? 0.55 : difficulty === 'balanced' ? 0.72 : 0.86,
-        dependsOn: explicit.length ? ['analysis', ...explicit]
-          : sequential && previous?.purpose === 'execution' ? ['analysis', previous.id] : ['analysis'],
-        preferredReasoningEffort: difficulty === 'simple' ? 'low' : difficulty === 'balanced' ? 'medium' : 'high',
-      })
-    })
-  } else {
-    const domains = [...new Set([...(detectTaskTypes(text)), taskType].filter(type => type !== 'general'))]
-    for (const type of domains.length > 0 ? domains : [taskType]) {
-      const objective = value.split(/[，,。；;]|最后|然后|接着|并且/u)
-        .map(item => item.trim()).filter(item => detectTaskTypes(item).includes(type)).join('；') || value
-      const difficulty = requirementDifficulty(objective, type)
-      packages.push({
-        id: `execution-${type}`,
-        name: `${TASK_TYPE_LABELS[type] ?? type}方向处理`,
-        objective,
-        type,
-        purpose: 'execution',
-        difficulty,
-        criticality: difficulty === 'simple' ? 0.55 : difficulty === 'balanced' ? 0.72 : 0.86,
-        dependsOn: ['analysis'],
-        preferredReasoningEffort: difficulty === 'simple' ? 'low' : difficulty === 'balanced' ? 'medium' : 'high',
-      })
-    }
-  }
-  if (/(测试|验证|评估|对比|benchmark|test|verify|audit)/i.test(value)) {
-    packages.push({
-      id: 'verification',
-      name: '验证、反例与风险审查',
-      type: 'reasoning',
-      purpose: 'verification',
-      difficulty: 'complex',
-      criticality: 0.88,
-      dependsOn: packages.filter(task => task.purpose === 'execution').map(task => task.id),
-      preferredReasoningEffort: 'high',
-    })
-  }
-  packages.push({
-    id: 'synthesis',
-    name: '结果校验与整合',
-    type: 'reasoning',
-    purpose: 'synthesis',
-    difficulty: 'complex',
-    criticality: 1,
-    dependsOn: packages.filter(task => task.purpose !== 'analysis').map(task => task.id),
-    preferredReasoningEffort: 'xhigh',
+  return roles.map(({ instruction, ...task }) => {
+    const item = { ...task, objective: instruction, difficulty: band,
+      criticality: task.purpose === 'synthesis' ? 1 : 0.85,
+      preferredReasoningEffort: band === 'simple' ? 'low' : band === 'balanced' ? 'medium' : 'high' }
+    return { ...item, qualityFloor: taskQualityFloor(band, item) }
   })
-  return packages.map(task => ({ ...task, qualityFloor: taskQualityFloor(band, task) }))
+}
+
+// Pick one stable configured route per family, shared by both of its roles.
+function fixedRoleRoutes(rows) {
+  const result = new Map()
+  for (const family of ['deepseek', 'qwen']) {
+    const matches = rows.filter(row => new RegExp(`(?:^|[/_.:-])${family}(?:$|[/_.:-]|[0-9])`, 'i').test(row.model))
+      .sort(compareRowsStable)
+    if (!matches.length) throw new Error(`固定四角色策略缺少 ${family === 'deepseek' ? 'DeepSeek' : 'Qwen'} 模型，请在模型目录中配置对应模型。`)
+    result.set(family, { provider: matches[0].provider, model: matches[0].model })
+  }
+  return result
 }
 
 const SYNTHESIS_WEIGHTS = Object.freeze({ quality: 0.58, cost: 0.08, latency: 0.04, specialty: 0.08, reasoning: 0.16, risk: 0.06 })
@@ -831,9 +754,10 @@ function dominates(left, right, task, text, complexity, cacheReadRatio, cacheWri
 }
 
 function eligibleRowsForTask(rows, task) {
+  const assignedRows = task.fixedRoute ? rows.filter(row => row.provider === task.fixedRoute.provider && row.model === task.fixedRoute.model) : rows
   const eligible = task.type === 'vision'
-    ? rows.filter(row => row.inputModalities.length === 0 || row.inputModalities.includes('image'))
-    : rows
+    ? assignedRows.filter(row => row.inputModalities.length === 0 || row.inputModalities.includes('image'))
+    : assignedRows
   return eligible.flatMap(row => taskActions(row, task))
 }
 
@@ -1008,13 +932,15 @@ export function buildPlan({ text = '', available = [], mode = 'collective', pric
     })
   }
   // Presets tilt each package's weights and quality floor; balanced is a no-op.
-  const taskNodes = taskPackages(taskType, text, complexity.band).map(task => presetId === DEFAULT_ROUTING_PRESET ? task : {
+  const roleRoutes = mode === 'direct' ? null : fixedRoleRoutes(rows)
+  const taskNodes = taskPackages(taskType, text, complexity.band, mode === 'direct').map(task => roleRoutes
+    ? { ...task, fixedRoute: roleRoutes.get(task.modelFamily) } : task).map(task => presetId === DEFAULT_ROUTING_PRESET ? task : {
     ...task,
     qualityFloor: presetFloor(task.qualityFloor, presetId),
     weights: presetWeights(weightsForTask(weights, task), presetId),
   })
   const unassignableTasks = taskNodes.filter(task => task.type === 'vision'
-    && !rows.some(row => row.inputModalities.length === 0 || row.inputModalities.includes('image')))
+    && eligibleRowsForTask(rows, task).length === 0)
     .map(task => task.id)
   const budget = Number(budgetUsd)
   const utilityPlan = solveAssignments({
@@ -1068,6 +994,7 @@ export function buildPlan({ text = '', available = [], mode = 'collective', pric
   const subtasks = assignments.map(({ task, row, decision }) => ({
     id: task.id,
     name: task.name,
+    ...(task.fixedRoute ? { fixedRoute: task.fixedRoute, modelFamily: task.modelFamily } : {}),
     ...(task.objective ? { objective: task.objective } : {}),
     type: task.type,
     difficulty: task.difficulty,
@@ -1136,9 +1063,10 @@ export function buildPlan({ text = '', available = [], mode = 'collective', pric
     ? unassignableTasks.length > 0
       ? `图像工作包 ${unassignableTasks.join('、')} 没有可用的图像模型，无法形成完整分配计划。`
       : '尚未发现可用模型，保留 Harness 原始模型选择。'
-    : `${complexity.band === 'simple' ? '低复杂度优先成本、响应速度与较低推理开销' : complexity.band === 'balanced' ? '在质量、成本、推理等级、延迟与风险之间平衡' : '高复杂度执行包含推理等级的依赖感知约束分配'}；任务类型为 ${taskType}，${String(subtasks.length)} 个工作包采用${optimized?.search?.exact ? '保留候选空间内的精确搜索' : '保留候选空间内的有界近似搜索'}。质量分与门槛是未校准的估计，不是答对概率。`
+    : `${roleRoutes ? '固定四角色：架构、开发使用 DeepSeek，测试、交付使用 Qwen；' : ''}${complexity.band === 'simple' ? '低复杂度优先成本、响应速度与较低推理开销' : complexity.band === 'balanced' ? '在质量、成本、推理等级、延迟与风险之间平衡' : '高复杂度执行包含推理等级的依赖感知约束分配'}；任务类型为 ${taskType}，${String(subtasks.length)} 个工作包采用${optimized?.search?.exact ? '保留候选空间内的精确搜索' : '保留候选空间内的有界近似搜索'}。质量分与门槛是未校准的估计，不是答对概率。`
   return {
     mode,
+    fixedRolePolicy: roleRoutes ? 'deepseek-architecture-development-qwen-test-delivery' : null,
     preset: presetId,
     complexity: { value: Number(complexity.value.toFixed(3)), band: complexity.band },
     compound,

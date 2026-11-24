@@ -34,6 +34,7 @@ function annotation(target, tool) {
 export function applyManualPackagePlan(plan, {
   task, packageAssignments, packagePlanKey: expectedKey,
 } = {}, routes, dataOptions = {}) {
+  if (plan?.fixedRolePolicy) throw new Error('固定四角色策略不允许手动更换模型：架构和开发使用 DeepSeek，测试和交付使用 Qwen。')
   const assignments = parsePackageAssignments(packageAssignments)
   if (!assignments) throw new TypeError('手动分配需要提供全部工作包目标。')
   const packages = plan?.team?.workPackages

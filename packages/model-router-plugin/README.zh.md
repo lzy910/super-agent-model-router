@@ -1,5 +1,8 @@
 # DSH 模型路由
 
+任务拆解固定为四个角色，按“架构 → 开发 → 测试 → 交付”依次执行。架构和开发共用一个已配置的 DeepSeek 模型，测试和交付共用一个已配置的 Qwen 模型。同系列存在多条路线时，按供应商和模型标识稳定选择一条；费用方案、质量评分和任务复杂度不会改变角色与模型绑定。缺少任一系列模型时，规划会报错提示配置。四角色工作包不支持手动改派或自动升级到其他模型，失败重跑沿用原定模型。指定单一模型的直接调用仍使用所指定的模型。
+
+
 [English](README.md) · 简体中文
 
 [![npm 版本](https://flat.badgen.net/npm/v/@ljwei-stak/dsh-model-router)](https://www.npmjs.com/package/@ljwei-stak/dsh-model-router)

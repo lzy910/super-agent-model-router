@@ -1,5 +1,8 @@
 # DSH Model Router
 
+Task decomposition always follows four roles: **Architecture → Development → Testing → Delivery**. Architecture and Development share one configured DeepSeek model; Testing and Delivery share one configured Qwen model. When a family has multiple routes, provider/model identifiers determine a stable selection. Complexity, pricing presets, and quality scores cannot change these bindings. Planning reports a configuration error if either family is missing. Fixed role packages cannot be manually reassigned or automatically upgraded to other models; retries retain their original models. Explicit direct calls continue to use the specified model.
+
+
 English · [简体中文](README.zh.md)
 
 [![npm version](https://flat.badgen.net/npm/v/@ljwei-stak/dsh-model-router)](https://www.npmjs.com/package/@ljwei-stak/dsh-model-router)

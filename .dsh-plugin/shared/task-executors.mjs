@@ -1307,6 +1307,7 @@ export function assignmentPackages(plan, task) {
     id: item.id,
     name: item.name,
     objective: item.objective ?? item.name,
+    ...(item.fixedRoute ? { fixedRoute: { ...item.fixedRoute }, modelFamily: item.modelFamily } : {}),
     dependsOn: [...(item.dependsOn ?? [])],
     recommendedProvider: item.recommendedProvider,
     recommendedModel: item.recommendedModel,
@@ -1452,6 +1453,9 @@ async function runPackages({ packages, task, routingBypassed, routes, previous =
     const target = selection.manualAssignment
     const provider = target?.kind === 'tool' ? 'official-tool' : target?.provider ?? override?.provider ?? item.recommendedProvider
     const model = target?.kind === 'tool' ? target.toolId : target?.model ?? override?.model ?? item.recommendedModel
+    if (item.fixedRoute && (provider !== item.fixedRoute.provider || model !== item.fixedRoute.model)) {
+      throw new Error('固定四角色工作包必须沿用原定模型，不能改派。')
+    }
     const identity = { ...selection, ...(item.type ? { type: item.type } : {}), ...(item.purpose ? { purpose: item.purpose } : {}) }
     const cancelledBeforeStart = async () => {
       // Cancelled: later packages are not started (no CLI process, no API spend).
